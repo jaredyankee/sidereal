@@ -1,0 +1,45 @@
+:root {
+	--paper: #f4eddc;
+	--ink: #2a2118;
+	--ink-soft: #3b3024;
+	--muted: #5a4e3c;
+	--sepia: #7a5a14;
+	--gold: #e9cf8a;
+	--vermilion: #9e2f1b;
+	--rule: #d8ccb0;
+	--highlight: #ebe1c8;
+
+	--font-script: 'Pinyon Script', cursive;
+	--font-caps: 'IM Fell English SC', Georgia, serif;
+	--font-body: 'Cormorant Garamond', Georgia, serif;
+	--font-glyph: 'Noto Sans Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	background: var(--paper);
+	color: var(--ink);
+	font-family: var(--font-body);
+	font-size: 18px;
+	-webkit-font-smoothing: antialiased;
+}
+
+a {
+	color: var(--sepia);
+}
+a:hover {
+	color: var(--ink);
+}
+
+.visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
