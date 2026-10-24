@@ -31,23 +31,25 @@
 	// The clock: one requestAnimationFrame loop that advances simulated time by real elapsed
 	// time × speed. Dragging a planet pauses it; the drag sets `time` directly.
 	$effect(() => {
-		let raf = 0;
-		let last = performance.now();
+		let frameId = 0;
+		let lastFrame = performance.now();
 		const tick = (now: number) => {
-			const dt = now - last;
-			last = now;
+			const elapsedMs = now - lastFrame;
+			lastFrame = now;
 			if (playing && !scrubbing) {
-				time = clampTime(time + dt * speed);
+				time = clampTime(time + elapsedMs * speed);
+				// Stop at either end of the supported window instead of pushing against it.
 				if (time === MAX_TIME || time === MIN_TIME) playing = false;
 			}
-			raf = requestAnimationFrame(tick);
+			frameId = requestAnimationFrame(tick);
 		};
-		raf = requestAnimationFrame(tick);
-		return () => cancelAnimationFrame(raf);
+		frameId = requestAnimationFrame(tick);
+		// Returning a cleanup function stops the loop if the page is torn down.
+		return () => cancelAnimationFrame(frameId);
 	});
 
-	function setSpeed(v: number) {
-		speed = v;
+	function setSpeed(newSpeed: number) {
+		speed = newSpeed;
 		playing = true;
 	}
 
@@ -84,7 +86,7 @@
 				ayanamsa={sky.ayanamsa}
 				sky={sky.bodies}
 				bind:active
-				onscrub={(t) => (time = t)}
+				onscrub={(newTime) => (time = newTime)}
 				onscrubstart={() => {
 					scrubbing = true;
 					playing = false;
@@ -110,12 +112,12 @@
 			<div class="controls">
 				<div class="eyebrow" id="pace">Pace of time</div>
 				<div class="row" role="group" aria-labelledby="pace">
-					{#each SPEEDS as s (s.value)}
+					{#each SPEEDS as option (option.value)}
 						<button
 							type="button"
 							class="pill"
-							aria-pressed={playing && speed === s.value}
-							onclick={() => setSpeed(s.value)}>{s.label}</button
+							aria-pressed={playing && speed === option.value}
+							onclick={() => setSpeed(option.value)}>{option.label}</button
 						>
 					{/each}
 				</div>

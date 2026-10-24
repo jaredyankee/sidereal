@@ -1,7 +1,6 @@
 <script lang="ts">
 	import type { SkyBody, SkyPosition } from '#lib/astro/positions.ts';
-	import { formatDegree } from '#lib/astro/zodiac.ts';
-	import { GLYPH } from '#lib/orrery/geometry.ts';
+	import { GLYPHS, formatDegree } from '#lib/astro/zodiac.ts';
 
 	let { sky, active = $bindable(null) }: { sky: SkyPosition[]; active?: SkyBody | null } = $props();
 </script>
@@ -12,12 +11,12 @@
 		<tr><th scope="col">Body</th><th scope="col">Sign</th><th scope="col">Degree</th><th scope="col">Motion</th></tr>
 	</thead>
 	<tbody>
-		{#each sky as b (b.body)}
-			<tr class:on={active === b.body} onpointerenter={() => (active = b.body)}>
-				<th scope="row"><span class="glyph" aria-hidden="true">{GLYPH[b.body]}</span>{b.body}</th>
-				<td class="sign">{b.sign}</td>
-				<td class="deg">{formatDegree(b.degree)}</td>
-				<td class="rx">{#if b.retrograde}<abbr title="Retrograde">Rx</abbr>{/if}</td>
+		{#each sky as position (position.body)}
+			<tr class:on={active === position.body} onpointerenter={() => (active = position.body)}>
+				<th scope="row"><span class="glyph" aria-hidden="true">{GLYPHS[position.body]}</span>{position.body}</th>
+				<td class="sign">{position.sign}</td>
+				<td class="deg">{formatDegree(position.degree)}</td>
+				<td class="rx">{#if position.retrograde}<abbr title="Retrograde">Rx</abbr>{/if}</td>
 			</tr>
 		{/each}
 	</tbody>

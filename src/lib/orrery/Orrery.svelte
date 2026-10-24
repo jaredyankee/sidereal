@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { helioLongitude, PLANETS, type Planet, type SkyBody, type SkyPosition } from '#lib/astro/positions.ts';
 	import { solveTimeForAngle } from '#lib/astro/scrub.ts';
-	import { SIGNS } from '#lib/astro/zodiac.ts';
+	import { norm360 } from '#lib/astro/time.ts';
+	import { GLYPHS, SIGNS } from '#lib/astro/zodiac.ts';
 	import {
-		C,
-		GLYPH,
+		CENTER,
 		MARKER_R,
 		ORBIT_R,
 		PLANET_SIZE,
@@ -39,94 +39,118 @@
 	let svg: SVGSVGElement;
 	let dragging = $state<Planet | null>(null);
 
+	// $derived values recompute whenever `time`, `sky` or `ayanamsa` change, so the drawing
+	// follows the clock and drags without any manual update code.
 	const planets = $derived(
 		PLANETS.map((name) => {
 			const angle = helioLongitude(name, time);
 			return { name, angle, ...polar(ORBIT_R[name], angle), size: PLANET_SIZE[name] };
 		})
 	);
-	const earth = $derived(planets.find((p) => p.name === 'Earth')!);
-	const byBody = $derived(Object.fromEntries(sky.map((b) => [b.body, b])) as Record<SkyBody, SkyPosition>);
-	const sightEnd = $derived(rayToCircle(earth.x, earth.y, byBody.Sun.tropical, RING_INNER));
+	const earth = $derived(planets.find((planet) => planet.name === 'Earth')!);
+	const skyByBody = $derived(
+		Object.fromEntries(sky.map((position) => [position.body, position])) as Record<SkyBody, SkyPosition>
+	);
+	// The red thread: from Earth, in the Sun's true geocentric direction, out to the zodiac ring.
+	const sunThreadEnd = $derived(rayToCircle(earth.x, earth.y, skyByBody.Sun.tropical, RING_INNER));
+	// The Moon is drawn on a small circle around Earth, in its true geocentric direction.
 	const moon = $derived.by(() => {
-		const a = (byBody.Moon.tropical * Math.PI) / 180;
-		return { x: earth.x + 16 * Math.cos(a), y: earth.y - 16 * Math.sin(a) };
+		const moonRadians = (skyByBody.Moon.tropical * Math.PI) / 180;
+		return { x: earth.x + 16 * Math.cos(moonRadians), y: earth.y - 16 * Math.sin(moonRadians) };
 	});
 
 	// Sign boundaries sit at tropical longitude ayanamsa + 30k, so the ring rotates slowly
 	// (about 1° every 72 years) as the equinox precesses.
 	const ticks = $derived(
-		SIGNS.map((_, k) => ({ a: polar(RING_INNER, ayanamsa + 30 * k), b: polar(RING_OUTER, ayanamsa + 30 * k) }))
-	);
-	const signLabels = $derived(
-		SIGNS.map((name, k) => {
-			const mid = ayanamsa + 30 * k + 15;
-			const { x, y } = polar((RING_INNER + RING_OUTER) / 2, mid);
-			let rot = (((90 - mid) % 360) + 360) % 360;
-			if (rot > 90 && rot < 270) rot = (rot + 180) % 360;
-			return { name, x, y, rot };
+		SIGNS.map((_, index) => {
+			const boundary = ayanamsa + 30 * index;
+			return { inner: polar(RING_INNER, boundary), outer: polar(RING_OUTER, boundary) };
 		})
 	);
-	const markers = $derived(sky.map((b) => ({ body: b.body, ...polar(MARKER_R, b.tropical) })));
+	const signLabels = $derived(
+		SIGNS.map((name, index) => {
+			const middle = ayanamsa + 30 * index + 15;
+			const { x, y } = polar((RING_INNER + RING_OUTER) / 2, middle);
+			// Turn each label to follow the ring, then flip the bottom half so no label reads upside down.
+			let rotation = norm360(90 - middle);
+			if (rotation > 90 && rotation < 270) rotation = (rotation + 180) % 360;
+			return { name, x, y, rotation };
+		})
+	);
+	const markers = $derived(sky.map((position) => ({ body: position.body, ...polar(MARKER_R, position.tropical) })));
 
-	const orbitBodies = PLANETS.map((name) => ({ name, r: ORBIT_R[name] }));
+	const orbits = PLANETS.map((name) => ({ name, radius: ORBIT_R[name] }));
 
-	function toSvg(e: PointerEvent) {
-		const m = svg.getScreenCTM();
-		if (!m) return null;
-		return new DOMPoint(e.clientX, e.clientY).matrixTransform(m.inverse());
+	/** Convert a pointer position on screen into the SVG's own 900 × 900 coordinates. */
+	function toSvgPoint(event: PointerEvent) {
+		const screenMatrix = svg.getScreenCTM();
+		if (!screenMatrix) return null;
+		return new DOMPoint(event.clientX, event.clientY).matrixTransform(screenMatrix.inverse());
 	}
 
-	function focusBody(p: Planet): SkyBody {
-		return p === 'Earth' ? 'Sun' : p;
+	/** Which readout row to highlight for a planet. Earth has no row; from Earth we see the Sun. */
+	function readoutBodyFor(planet: Planet): SkyBody {
+		return planet === 'Earth' ? 'Sun' : planet;
 	}
 
-	function onDown(p: Planet, e: PointerEvent) {
-		e.preventDefault();
-		(e.currentTarget as Element).setPointerCapture(e.pointerId);
-		dragging = p;
-		active = focusBody(p);
+	function onPointerDown(planet: Planet, event: PointerEvent) {
+		event.preventDefault();
+		// Capture keeps the move events coming to this planet even when the pointer leaves it.
+		(event.currentTarget as Element).setPointerCapture(event.pointerId);
+		dragging = planet;
+		active = readoutBodyFor(planet);
 		onscrubstart?.();
 	}
 
-	function onMove(p: Planet, e: PointerEvent) {
-		if (dragging !== p) return;
-		const pt = toSvg(e);
-		if (pt) onscrub(solveTimeForAngle(p, time, angleOf(pt.x, pt.y)));
+	function onPointerMove(planet: Planet, event: PointerEvent) {
+		if (dragging !== planet) return;
+		const point = toSvgPoint(event);
+		if (point) onscrub(solveTimeForAngle(planet, time, angleOf(point.x, point.y)));
 	}
 
-	function onUp(p: Planet) {
-		if (dragging !== p) return;
+	function onPointerUp(planet: Planet) {
+		if (dragging !== planet) return;
 		dragging = null;
 		onscrubend?.();
 	}
 
-	// Each planet is a real slider for keyboard users: arrows turn it 1°, Shift 10°.
-	function onKey(p: Planet, angle: number, e: KeyboardEvent) {
-		const step = e.shiftKey ? 10 : 1;
-		const delta =
-			e.key === 'ArrowRight' || e.key === 'ArrowUp'
-				? step
-				: e.key === 'ArrowLeft' || e.key === 'ArrowDown'
-					? -step
-					: e.key === 'PageUp'
-						? 30
-						: e.key === 'PageDown'
-							? -30
-							: 0;
-		if (!delta) return;
-		e.preventDefault();
+	/** Degrees a key turns a planet: arrows 1° (Shift 10°), Page Up/Down 30°. Zero for other keys. */
+	function keyStep(event: KeyboardEvent): number {
+		const arrowStep = event.shiftKey ? 10 : 1;
+		switch (event.key) {
+			case 'ArrowRight':
+			case 'ArrowUp':
+				return arrowStep;
+			case 'ArrowLeft':
+			case 'ArrowDown':
+				return -arrowStep;
+			case 'PageUp':
+				return 30;
+			case 'PageDown':
+				return -30;
+			default:
+				return 0;
+		}
+	}
+
+	// Each planet is a real slider for keyboard users.
+	function onKeyDown(planet: Planet, angle: number, event: KeyboardEvent) {
+		const step = keyStep(event);
+		if (step === 0) return;
+		event.preventDefault();
 		// A key press is a whole drag in one step, so it must end the scrub too.
 		// Without onscrubend the page would think a drag is still running and never resume.
 		onscrubstart?.();
-		onscrub(solveTimeForAngle(p, time, angle + delta));
+		onscrub(solveTimeForAngle(planet, time, angle + step));
 		onscrubend?.();
 	}
 
 	const dateText = $derived(
 		new Date(time).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 	);
-	const fx = (n: number) => n.toFixed(2);
+
+	/** Two decimals is plenty on a 900-unit drawing and keeps the SVG markup short. */
+	const twoDecimals = (value: number) => value.toFixed(2);
 </script>
 
 <svg
@@ -146,59 +170,90 @@
 
 	<g aria-hidden="true">
 		<g filter="url(#ink)">
-			<circle class="ring" cx={C} cy={C} r={RING_OUTER + 4} />
-			<circle class="ring-thin" cx={C} cy={C} r={RING_OUTER} />
-			<circle class="ring" cx={C} cy={C} r={RING_INNER} />
-			{#each orbitBodies as o (o.name)}
-				<circle class="orbit" cx={C} cy={C} r={o.r} />
+			<circle class="ring" cx={CENTER} cy={CENTER} r={RING_OUTER + 4} />
+			<circle class="ring-thin" cx={CENTER} cy={CENTER} r={RING_OUTER} />
+			<circle class="ring" cx={CENTER} cy={CENTER} r={RING_INNER} />
+			{#each orbits as orbit (orbit.name)}
+				<circle class="orbit" cx={CENTER} cy={CENTER} r={orbit.radius} />
 			{/each}
 		</g>
-		{#each ticks as t, i (i)}
-			<line class="tick" x1={fx(t.a.x)} y1={fx(t.a.y)} x2={fx(t.b.x)} y2={fx(t.b.y)} />
+		{#each ticks as tick, index (index)}
+			<line
+				class="tick"
+				x1={twoDecimals(tick.inner.x)}
+				y1={twoDecimals(tick.inner.y)}
+				x2={twoDecimals(tick.outer.x)}
+				y2={twoDecimals(tick.outer.y)}
+			/>
 		{/each}
-		{#each signLabels as s (s.name)}
-			<text class="sign" x={fx(s.x)} y={fx(s.y)} transform="rotate({fx(s.rot)} {fx(s.x)} {fx(s.y)})">{s.name}</text>
+		{#each signLabels as label (label.name)}
+			<text
+				class="sign"
+				x={twoDecimals(label.x)}
+				y={twoDecimals(label.y)}
+				transform="rotate({twoDecimals(label.rotation)} {twoDecimals(label.x)} {twoDecimals(label.y)})"
+				>{label.name}</text
+			>
 		{/each}
 
-		<line class="sight" x1={fx(earth.x)} y1={fx(earth.y)} x2={fx(sightEnd.x)} y2={fx(sightEnd.y)} />
+		<line
+			class="sight"
+			x1={twoDecimals(earth.x)}
+			y1={twoDecimals(earth.y)}
+			x2={twoDecimals(sunThreadEnd.x)}
+			y2={twoDecimals(sunThreadEnd.y)}
+		/>
 
-		{#each markers as m (m.body)}
-			<text class="marker" class:on={active === m.body} x={fx(m.x)} y={fx(m.y)}>{GLYPH[m.body]}</text>
+		{#each markers as marker (marker.body)}
+			<text class="marker" class:on={active === marker.body} x={twoDecimals(marker.x)} y={twoDecimals(marker.y)}
+				>{GLYPHS[marker.body]}</text
+			>
 		{/each}
 
-		<circle class="halo" cx={C} cy={C} r="30" />
-		<circle class="sun" cx={C} cy={C} r="17" />
+		<circle class="halo" cx={CENTER} cy={CENTER} r="30" />
+		<circle class="sun" cx={CENTER} cy={CENTER} r="17" />
 
-		<circle class="moon-orbit" cx={fx(earth.x)} cy={fx(earth.y)} r="16" />
-		<circle class="moon" cx={fx(moon.x)} cy={fx(moon.y)} r="2.6" />
+		<circle class="moon-orbit" cx={twoDecimals(earth.x)} cy={twoDecimals(earth.y)} r="16" />
+		<circle class="moon" cx={twoDecimals(moon.x)} cy={twoDecimals(moon.y)} r="2.6" />
 
-		{#each planets as p (p.name)}
-			<circle class={p.name === 'Earth' ? 'earth' : 'planet'} class:on={dragging === p.name} cx={fx(p.x)} cy={fx(p.y)} r={p.size} />
-			<text class="label" x={fx(p.x + p.size + 5)} y={fx(p.y - p.size - 3)}>{p.name}</text>
+		{#each planets as planet (planet.name)}
+			<circle
+				class={planet.name === 'Earth' ? 'earth' : 'planet'}
+				class:on={dragging === planet.name}
+				cx={twoDecimals(planet.x)}
+				cy={twoDecimals(planet.y)}
+				r={planet.size}
+			/>
+			<text
+				class="label"
+				x={twoDecimals(planet.x + planet.size + 5)}
+				y={twoDecimals(planet.y - planet.size - 3)}>{planet.name}</text
+			>
 		{/each}
 	</g>
 
 	<!-- Invisible, generous hit areas: these are the sliders. -->
-	{#each planets as p (p.name)}
+	{#each planets as planet (planet.name)}
+		{@const degrees = Math.round(norm360(planet.angle))}
 		<circle
 			class="hit"
-			cx={fx(p.x)}
-			cy={fx(p.y)}
+			cx={twoDecimals(planet.x)}
+			cy={twoDecimals(planet.y)}
 			r="24"
 			tabindex="0"
 			role="slider"
-			aria-label="{p.name}, drag to move through time"
+			aria-label="{planet.name}, drag to move through time"
 			aria-valuemin={0}
 			aria-valuemax={360}
-			aria-valuenow={Math.round(((p.angle % 360) + 360) % 360)}
-			aria-valuetext="{p.name} at {Math.round(((p.angle % 360) + 360) % 360)}°, {dateText}"
-			onpointerdown={(e) => onDown(p.name, e)}
-			onpointermove={(e) => onMove(p.name, e)}
-			onpointerup={() => onUp(p.name)}
-			onpointercancel={() => onUp(p.name)}
-			onpointerenter={() => (active = focusBody(p.name))}
-			onfocus={() => (active = focusBody(p.name))}
-			onkeydown={(e) => onKey(p.name, p.angle, e)}
+			aria-valuenow={degrees}
+			aria-valuetext="{planet.name} at {degrees}°, {dateText}"
+			onpointerdown={(event) => onPointerDown(planet.name, event)}
+			onpointermove={(event) => onPointerMove(planet.name, event)}
+			onpointerup={() => onPointerUp(planet.name)}
+			onpointercancel={() => onPointerUp(planet.name)}
+			onpointerenter={() => (active = readoutBodyFor(planet.name))}
+			onfocus={() => (active = readoutBodyFor(planet.name))}
+			onkeydown={(event) => onKeyDown(planet.name, planet.angle, event)}
 		/>
 	{/each}
 </svg>
