@@ -1,7 +1,8 @@
 /** SVG geometry for the orrery. Ecliptic longitude 0° points right; angles grow counter-clockwise. */
 
 export const SIZE = 900;
-export const C = SIZE / 2;
+/** The Sun sits at the centre of the square drawing. */
+export const CENTER = SIZE / 2;
 
 /** Zodiac band and where geocentric markers sit. */
 export const RING_INNER = 400;
@@ -31,40 +32,40 @@ export const PLANET_SIZE = {
 	Neptune: 7
 } as const;
 
-const rad = (deg: number) => (deg * Math.PI) / 180;
-
-export function polar(r: number, deg: number) {
-	return { x: C + r * Math.cos(rad(deg)), y: C - r * Math.sin(rad(deg)) };
+function toRadians(degrees: number): number {
+	return (degrees * Math.PI) / 180;
 }
 
-/** Ecliptic angle of an SVG point as seen from the Sun. */
-export function angleOf(x: number, y: number) {
-	return (Math.atan2(C - y, x - C) * 180) / Math.PI;
+/** The SVG point at `radius` from the Sun, in direction `degrees`.
+ *  SVG's y axis points down, so y is subtracted to make angles turn counter-clockwise. */
+export function polar(radius: number, degrees: number) {
+	return {
+		x: CENTER + radius * Math.cos(toRadians(degrees)),
+		y: CENTER - radius * Math.sin(toRadians(degrees))
+	};
 }
 
-/** Where a ray from (px, py) at `deg` meets the circle of radius r around the Sun. */
-export function rayToCircle(px: number, py: number, deg: number, r: number) {
-	const dx = Math.cos(rad(deg));
-	const dy = -Math.sin(rad(deg));
-	const ox = px - C;
-	const oy = py - C;
-	const b = ox * dx + oy * dy;
-	const s = -b + Math.sqrt(b * b - (ox * ox + oy * oy - r * r));
-	return { x: px + s * dx, y: py + s * dy };
+/** Ecliptic angle of an SVG point as seen from the Sun. The inverse of `polar`. */
+export function angleOf(x: number, y: number): number {
+	return (Math.atan2(CENTER - y, x - CENTER) * 180) / Math.PI;
 }
 
-/** Text glyphs; the trailing U+FE0E asks for the text form, never an emoji. */
-export const GLYPH: Record<string, string> = {
-	Sun: '☉︎',
-	Moon: '☽︎',
-	Mercury: '☿︎',
-	Venus: '♀︎',
-	Earth: '⊕︎',
-	Mars: '♂︎',
-	Jupiter: '♃︎',
-	Saturn: '♄︎',
-	Uranus: '♅︎',
-	Neptune: '♆︎',
-	Rahu: '☊︎',
-	Ketu: '☋︎'
-};
+/**
+ * Where a ray starting at (startX, startY) and heading in direction `degrees` meets the
+ * circle of `radius` around the Sun. Used for the Earth → Sun thread out to the zodiac ring.
+ *
+ * Walking `distance` along the ray lands on the circle when the point's distance from the
+ * centre equals `radius`. Squaring that gives a quadratic in `distance`; the start is inside
+ * the circle, so we take the positive root (the forward crossing).
+ */
+export function rayToCircle(startX: number, startY: number, degrees: number, radius: number) {
+	const directionX = Math.cos(toRadians(degrees));
+	const directionY = -Math.sin(toRadians(degrees));
+	const offsetX = startX - CENTER;
+	const offsetY = startY - CENTER;
+	const projection = offsetX * directionX + offsetY * directionY;
+	const startDistanceSquared = offsetX * offsetX + offsetY * offsetY;
+	const distance =
+		-projection + Math.sqrt(projection * projection - (startDistanceSquared - radius * radius));
+	return { x: startX + distance * directionX, y: startY + distance * directionY };
+}
