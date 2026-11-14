@@ -19,7 +19,7 @@ Because the orbit radii are not to scale, a line from the drawn Earth to a drawn
 
 **Drag to scrub** (`src/lib/astro/scrub.ts`): the pointer angle becomes a target heliocentric longitude for the dragged planet, and Newton's method on that planet's local angular speed solves for the instant it gets there. Steps always take the shortest way round, so continuous drags accumulate whole orbits instead of snapping back.
 
-**Ayanamsa** (`src/lib/astro/zodiac.ts`): value at J2000 plus IAU 2006 general precession. Accurate to a few arcseconds of Swiss Ephemeris over the supported window (years 1000–3000).
+**Ayanamsa** (`src/lib/astro/zodiac.ts`): value at J2000 plus IAU 2006 general precession, plus nutation in longitude so it matches the true-equinox positions it is subtracted from. Matches Swiss Ephemeris to under 1″ over the supported window (years 1000–3000).
 
 ## Layout
 

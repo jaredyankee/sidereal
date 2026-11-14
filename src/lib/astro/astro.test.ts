@@ -14,7 +14,13 @@ describe('ayanamsa', () => {
 
 	it('Fagan-Bradley runs about 0.88° ahead of Lahiri', () => {
 		const gap = ayanamsa(OCT_19_2026, 'fagan-bradley') - ayanamsa(OCT_19_2026, 'lahiri');
-		expect(gap).toBeCloseTo(0.879, 2);
+		expect(gap).toBeCloseTo(0.8832, 3);
+	});
+
+	it('matches Swiss Ephemeris true Lahiri (with nutation) to within 1″', () => {
+		// Swiss Ephemeris 2.10: 24.233814° at 2026-10-24 00:00 UT.
+		const arcsecOff = (skyAt(Date.UTC(2026, 9, 24)).ayanamsa - 24.233814) * 3600;
+		expect(Math.abs(arcsecOff)).toBeLessThan(1);
 	});
 
 	it('grows by about 50.3″ per year', () => {
@@ -41,9 +47,11 @@ describe('sidereal placements', () => {
 		expect(placement(OCT_19_2026, 'Saturn').sign).toBe('Pisces');
 	});
 
-	it('the Sun enters sidereal Aries around April 14 (Lahiri)', () => {
-		expect(placement(Date.UTC(2026, 3, 10), 'Sun').sign).toBe('Pisces');
-		expect(placement(Date.UTC(2026, 3, 18), 'Sun').sign).toBe('Aries');
+	it('the Sun enters sidereal Aries at 04:03 UT on April 14, 2026 (Lahiri, per Swiss Ephemeris)', () => {
+		const ingress = Date.UTC(2026, 3, 14, 4, 3);
+		const twoMinutes = 2 * 60 * 1000;
+		expect(placement(ingress - twoMinutes, 'Sun').sign).toBe('Pisces');
+		expect(placement(ingress + twoMinutes, 'Sun').sign).toBe('Aries');
 	});
 
 	it('detects Mercury retrograde (Oct 24 – Nov 13, 2026)', () => {
