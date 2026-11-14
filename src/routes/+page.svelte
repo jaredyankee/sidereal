@@ -165,8 +165,9 @@
 		padding-bottom: 12px;
 	}
 	.wordmark {
-		font-family: var(--font-script);
-		font-size: clamp(32px, 6vw, 44px);
+		font-family: var(--font-caps);
+		font-size: clamp(28px, 5vw, 36px);
+		letter-spacing: 1px;
 		line-height: 1.1;
 		color: var(--ink);
 		text-decoration: none;
@@ -227,10 +228,10 @@
 		color: var(--muted);
 	}
 	.date {
-		font-family: var(--font-script);
-		font-size: 40px;
+		font-size: 36px;
+		font-weight: 500;
 		line-height: 1.2;
-		font-variant-numeric: tabular-nums;
+		font-variant-numeric: lining-nums tabular-nums;
 	}
 	.sub {
 		font-size: 17px;
