@@ -57,13 +57,23 @@ export const SKY_BODIES: SkyBody[] = [
 	'Ketu'
 ];
 
-/** Mean lunar node (Rahu), degrees. Ketu sits exactly opposite. Meeus ch. 47. */
+/**
+ * Nutation in longitude, degrees: a small wobble of the Earth's axis, driven mostly by the
+ * Moon's orbit on an 18.6-year cycle, that moves the true equinox up to about ±17″ either
+ * side of the mean equinox. From astronomy-engine's IAU 2000B model, which gives arcseconds.
+ */
+export function nutationInLongitude(ms: number): number {
+	const tilt = Astronomy.e_tilt(Astronomy.MakeTime(new Date(ms)));
+	return tilt.dpsi / 3600;
+}
+
+/** Mean lunar node (Rahu), degrees from the mean equinox. Ketu sits exactly opposite. Meeus ch. 47. */
 function meanNode(ms: number): number {
 	const centuries = centuriesSinceJ2000(ms);
 	return norm360(125.0445479 - 1934.1362891 * centuries + 0.0020754 * centuries * centuries);
 }
 
-/** Tropical geocentric longitude of date: the position as seen from Earth. */
+/** Tropical geocentric longitude from the true equinox of date: the position as seen from Earth. */
 export function geoLongitude(body: SkyBody, ms: number): number {
 	const date = new Date(ms);
 	switch (body) {
@@ -71,10 +81,12 @@ export function geoLongitude(body: SkyBody, ms: number): number {
 			return Astronomy.SunPosition(date).elon;
 		case 'Moon':
 			return Astronomy.EclipticGeoMoon(date).lon;
+		// The node formula uses the mean equinox; adding nutation puts it on the same true
+		// equinox astronomy-engine uses for everything else.
 		case 'Rahu':
-			return meanNode(ms);
+			return norm360(meanNode(ms) + nutationInLongitude(ms));
 		case 'Ketu':
-			return norm360(meanNode(ms) + 180);
+			return norm360(meanNode(ms) + nutationInLongitude(ms) + 180);
 		default: {
 			// `true` corrects for aberration: where the planet appears, not where it is.
 			const vector = Astronomy.GeoVector(body as Astronomy.Body, date, true);
@@ -105,7 +117,10 @@ export interface SkyPosition extends SiderealPlacement {
 
 /** Everything the readout panel needs for one instant. */
 export function skyAt(ms: number, kind: AyanamsaKind = 'lahiri') {
-	const ayanamsaDegrees = ayanamsa(ms, kind);
+	// Tropical positions are measured from the true equinox, which includes nutation, while
+	// the ayanamsa is defined from the mean equinox. Adding the nutation to the ayanamsa lets
+	// it cancel out when we subtract, the same convention Swiss Ephemeris uses.
+	const ayanamsaDegrees = ayanamsa(ms, kind) + nutationInLongitude(ms);
 	const bodies: SkyPosition[] = SKY_BODIES.map((body) => {
 		const tropical = geoLongitude(body, ms);
 		return {

@@ -35,18 +35,20 @@ export const GLYPHS: Record<string, string> = {
 export type AyanamsaKind = 'lahiri' | 'fagan-bradley';
 
 export const AYANAMSAS: Record<AyanamsaKind, { label: string; atJ2000: number }> = {
-	// Lahiri (Chitrapaksha), the Indian government standard: 23°51′25″ at J2000.
-	lahiri: { label: 'Lahiri', atJ2000: 23.857 },
-	// Fagan-Bradley, the Western sidereal standard: 24°44′ at J2000.
-	'fagan-bradley': { label: 'Fagan-Bradley', atJ2000: 24.736 }
+	// Values at J2000 from the mean equinox, matching Swiss Ephemeris 2.10.
+	// Lahiri (Chitrapaksha), the Indian government standard: 23°51′25.5″.
+	lahiri: { label: 'Lahiri', atJ2000: 23.857092 },
+	// Fagan-Bradley, the Western sidereal standard: 24°44′25.1″.
+	'fagan-bradley': { label: 'Fagan-Bradley', atJ2000: 24.7403 }
 };
 
 /** General precession in longitude, arcseconds per Julian century (IAU 2006, linear + quadratic). */
 const PRECESSION_ARCSEC = 5028.796195;
 const PRECESSION_ARCSEC_T2 = 1.1054348;
 
-/** Ayanamsa in degrees: the gap between the tropical and sidereal zodiacs at a given instant.
- *  It starts at the J2000 value and grows as the equinox precesses (about 50″ a year). */
+/** Mean ayanamsa in degrees: the gap between the tropical and sidereal zodiacs at a given
+ *  instant, measured from the mean equinox. It starts at the J2000 value and grows as the
+ *  equinox precesses (about 50″ a year). `skyAt` adds nutation to this before using it. */
 export function ayanamsa(ms: number, kind: AyanamsaKind = 'lahiri'): number {
 	const centuries = centuriesSinceJ2000(ms);
 	const precessionArcsec =
